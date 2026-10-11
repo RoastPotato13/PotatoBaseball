@@ -9,6 +9,7 @@ function player = generate_player(name, type)
   % Ratings use a 20-80 scouting scale (55 = league average),
   % generated as a rounded normal distribution so most players
   % cluster near average with occasional stars/scrubs.
+  %test commit
 
   player.name = name;
   player.type = type;
