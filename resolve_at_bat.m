@@ -5,56 +5,38 @@ function [outcome, rolls] = resolve_at_bat(batter, pitcher, park)
   %
   %   outcome : 'K','BB','HR','1B','2B','3B','PBWP','LIVEBALL'
   %             (PBWP and LIVEBALL are stubs until those stages exist)
-  %   rolls     : cell array of strings describing each roll
+  %   rolls   : cell array of strings describing each roll
   %
-  % Deadball roll (d8):
-  %   1-2  Ballpark/Split roll (d12 on the park's table for this
-  %        pitcher-hand v batter-hand split, e.g. RvL = RHP vs LHB;
-  %        slot 1 = PB/WP, slots 2-12 = K, BB, HR or BIP)
-  %   3-6  K possibility
-  %   7    BB possibility
-  %   8    HR possibility
+  % One d100 roll (two d10s, read as 00-99) on the park's table for this
+  % pitcher-hand v batter-hand split (e.g. RvL = RHP vs LHB):
+  %   00-03   PB/WP check
+  %   04-99   K, BIP, BB or HR, laid out per park and split
   %
-  % Possibility: batter and pitcher each roll a d20 against their own
-  % skill of that name (K, BB or HR). If both rolls are <= skill the
-  % result stands; otherwise move on to the Liveball portion.
+  % K/BB/HR are "possibilities": batter and pitcher each roll a d20
+  % against their own skill of that name. If both rolls are <= skill
+  % the result stands; otherwise move on to the Liveball portion.
+  % BIP goes straight to the Liveball portion.
 
   rolls = {};
 
-  d8 = randi(8);
-  rolls{end+1} = sprintf('Deadball d8: %d', d8);
+  split_key = [pitcher.hand 'v' batter.hand];
+  tbl = park.(split_key);
+  d100 = randi(100) - 1;      % 00-99, like two d10s
+  result = tbl{d100 + 1};     % tables are 1-indexed
+  rolls{end+1} = sprintf('Deadball d100 (%s, %s): %02d -> %s', ...
+                         park.name, split_key, d100, result);
 
-  if d8 <= 2
-    % ---- Ballpark/Split roll ----
-    split_key = [pitcher.hand 'v' batter.hand];
-    tbl = park.(split_key);
-    d12 = randi(12);
-    result = tbl{d12};
-    rolls{end+1} = sprintf('Ballpark/Split d12 (%s, %s): %d -> %s', ...
-                         park.name, split_key, d12, result);
-
-    switch result
-      case 'PBWP'
-        % TODO: PB/WP check. Stub for now.
-        outcome = 'PBWP';
-        rolls{end+1} = 'PB/WP check (not yet implemented)';
-      case 'BIP'
-        [outcome, rolls] = liveball(rolls);
-      case {'K','BB','HR'}
-        [outcome, rolls] = possibility(result, batter, pitcher, rolls);
-      otherwise
-        error('resolve_at_bat: unexpected park result ''%s''', result);
-    end
-  else
-    % ---- Standard deadball outcomes ----
-    if d8 <= 6
-      event = 'K';
-    elseif d8 == 7
-      event = 'BB';
-    else
-      event = 'HR';
-    end
-    [outcome, rolls] = possibility(event, batter, pitcher, rolls);
+  switch result
+    case 'PBWP'
+      % TODO: PB/WP check. Stub for now.
+      outcome = 'PBWP';
+      rolls{end+1} = 'PB/WP check (not yet implemented)';
+    case 'BIP'
+      [outcome, rolls] = liveball(rolls);
+    case {'K','BB','HR'}
+      [outcome, rolls] = possibility(result, batter, pitcher, rolls);
+    otherwise
+      error('resolve_at_bat: unexpected park result ''%s''', result);
   end
 end
 

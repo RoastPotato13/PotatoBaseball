@@ -4,7 +4,7 @@
 % plate appearances with a roll-by-roll rolls, then a results tally.
 % Finishes with a larger silent run (M PAs) to sanity check rates.
 
-clear; clc;
+clear;
 
 N = 10;       % verbose plate appearances
 M = 20000;    % silent plate appearances for the rate check
