@@ -1,39 +1,64 @@
-function player = generate_player(name, type)
+function player = generate_player(name, type, rates)
   % GENERATE_PLAYER Create a randomly-skilled batter or pitcher.
   %
   %   player = generate_player(name, type)
+  %   player = generate_player(name, type, rates)
   %
-  %   name : string, player's name
-  %   type : 'batter' or 'pitcher'
+  %   name  : string, player's name
+  %   type  : 'batter' or 'pitcher'
+  %   rates : (optional) struct of real per-PA rates as fractions, e.g.
+  %           struct('K', 0.2614, 'BB', 0.09, 'HR', 0.04). If omitted,
+  %           the player's rates are drawn at random around the league
+  %           average.
   %
-  % Every player has three skills on the d20 scale (1-20): K, BB, HR.
-  % In the deadball roll, a K/BB/HR "possibility" stands only if BOTH
+  % Pipeline for each of K, BB, HR:
+  %   1. League average rate        e.g. K = 22.0% of PA
+  %   2. League BASELINE            = (league rate)^(1/3) * factor
+  %                                   (factor is per event and per type)
+  %                                   (the baseline is the d20 pass
+  %                                   chance of an average player, so
+  %                                   baseline * 20 = league d20 skill)
+  %   3. Player real rate           e.g. 26.14%  (drawn, or passed in)
+  %   4. Ratio                      = player rate / league rate
+  %   5. Player baseline            = league baseline * ratio
+  %   6. d20 skill                  = round(20 * player baseline),
+  %                                   clamped to 1-20
+  %
+  % In the deadball roll a K/BB/HR "possibility" stands only if BOTH
   % the batter and the pitcher roll a d20 that is <= their own skill
-  % of that name. So a higher skill always means "more of that event":
+  % of that name. Higher skill always means "more of that event":
   %   batter K  = strikeout-prone      pitcher K  = strikes batters out
   %   batter BB = draws walks          pitcher BB = issues walks
   %   batter HR = hits homers          pitcher HR = gives up homers
 
   % ======================================================================
-  % LEAGUE AVERAGES (d20 skill scale) -- tune these at the top
+  % LEAGUE AVERAGES (real per-PA rates, as fractions) -- tune at the top
   % ======================================================================
-  % How these were picked: the deadball d8 sends 4/8 of PAs to a K
-  % possibility, 1/8 to BB, 1/8 to HR. Event chance per PA is then
-  %   P(event) = P(d8 hits it) * (batterSkill/20) * (pitcherSkill/20)
-  % Targets: K ~22%, BB ~8.5%, HR ~3%  ->  skills of about 13 / 16 / 10.
-  % (The Ballpark/Split roll may add events later, so retune then.)
-  LG_BATTER_K    = 13;
-  LG_BATTER_BB   = 16;
-  LG_BATTER_HR   = 10;
+  LG_K  = 0.220;     % 22.0% strikeouts
+  LG_BB = 0.08;     %  8.0% walks
+  LG_HR = 0.03;     %  3.0% home runs
 
-  LG_PITCHER_K   = 13;
-  LG_PITCHER_BB  = 16;
-  LG_PITCHER_HR  = 10;
+  % Baseline factors: baseline = (league rate)^(1/3) * factor.
+  % One factor per event, separately for batters and pitchers (6 total).
+  % Raise a factor and that skill goes up for that type (more of that
+  % possibility standing); lower it and it goes down.
+  % Defaults put a league-average player at d20 skills of K 13, BB 16,
+  % HR 10 (factor = (skill/20) / league_rate^(1/3)).
+  BATTER_FACTOR_K   = 1.10;
+  BATTER_FACTOR_BB  = 1.5;
+  BATTER_FACTOR_HR  = 1.00;
 
-  % Spread (standard deviation) of skills around the league average.
-  SD_K  = 3;
-  SD_BB = 2.5;
-  SD_HR = 3;
+  PITCHER_FACTOR_K  = 1.10;
+  PITCHER_FACTOR_BB = 1.5;
+  PITCHER_FACTOR_HR = 2.0;
+
+  % Spread (standard deviation) of real rates around the league
+  % average, in the same units as the rates: fractions of PA, so 0.014
+  % means 1.4 percentage points. Rates are drawn from a normal
+  % distribution (no skew modeled for now) and floored at 0.
+  SD_K  = 0.050;     % 5.0 points
+  SD_BB = 0.030;     % 3.0 points
+  SD_HR = 0.014;     % 1.4 points
 
   % Skill bounds (d20: 1 = 5% to succeed, 20 = always succeeds)
   SKILL_MIN = 1;
@@ -45,14 +70,18 @@ function player = generate_player(name, type)
   LG_PCT_LEFT_PITCHER = 0.25;
   % ======================================================================
 
+  if nargin < 3
+    rates = [];
+  end
+
   player.name = name;
   player.type = type;
 
   if strcmpi(type, 'batter')
-    avg_k = LG_BATTER_K;  avg_bb = LG_BATTER_BB;  avg_hr = LG_BATTER_HR;
+    factor = [BATTER_FACTOR_K BATTER_FACTOR_BB BATTER_FACTOR_HR];
     pct_left = LG_PCT_LEFT_BATTER;
   elseif strcmpi(type, 'pitcher')
-    avg_k = LG_PITCHER_K; avg_bb = LG_PITCHER_BB; avg_hr = LG_PITCHER_HR;
+    factor = [PITCHER_FACTOR_K PITCHER_FACTOR_BB PITCHER_FACTOR_HR];
     pct_left = LG_PCT_LEFT_PITCHER;
   else
     error('generate_player: type must be ''batter'' or ''pitcher''');
@@ -65,14 +94,33 @@ function player = generate_player(name, type)
     player.hand = 'R';
   end
 
-  player.K  = roll_skill(avg_k,  SD_K,  SKILL_MIN, SKILL_MAX);
-  player.BB = roll_skill(avg_bb, SD_BB, SKILL_MIN, SKILL_MAX);
-  player.HR = roll_skill(avg_hr, SD_HR, SKILL_MIN, SKILL_MAX);
-end
+  stats  = {'K', 'BB', 'HR'};
+  lg     = [LG_K LG_BB LG_HR];
+  sd     = [SD_K SD_BB SD_HR];
 
-function s = roll_skill(mu, sigma, lo, hi)
-  % Rounded normal draw (randn is built in, no statistics package),
-  % clamped to the d20 range.
-  s = round(mu + sigma * randn());
-  s = max(lo, min(hi, s));
+  for i = 1:numel(stats)
+    s = stats{i};
+
+    % 2. league baseline
+    lg_baseline = lg(i)^(1/3) * factor(i);
+
+    % 3. player's real rate (drawn, or supplied)
+    if isempty(rates)
+      real_rate = max(0, lg(i) + sd(i) * randn());
+    else
+      real_rate = rates.(s);
+    end
+
+    % 4-5. same ratio to league average, applied to the baseline
+    ratio = real_rate / lg(i);
+    baseline = lg_baseline * ratio;
+
+    % 6. scale to d20 and round
+    player.(s) = max(SKILL_MIN, min(SKILL_MAX, round(20 * baseline)));
+
+    % Keep the intermediate numbers for inspection/printing.
+    player.rate.(s)     = real_rate;
+    player.ratio.(s)    = ratio;
+    player.baseline.(s) = baseline;
+  end
 end
