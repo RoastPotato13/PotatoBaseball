@@ -8,11 +8,14 @@ clear;
 
 N = 10;       % verbose plate appearances
 M = 20000;    % silent plate appearances for the rate check
-park_name = 'tater';   % 'spudsville', 'tater', 'coldstorage'
+park_name = 'random';   % 'spudsville', 'tater', 'coldstorage', 'random'
 
 batter  = generate_player('Spud Malone', 'batter');
 pitcher = generate_player('Russet Grimes', 'pitcher');
 park    = get_park(park_name);
+
+print_park(park);
+printf('\n');
 
 printf('--- Matchup at %s (%sv%s, pitcher v batter) ---\n', park.name, pitcher.hand, batter.hand);
 printf('%s (bats %s)   K:%d BB:%d HR:%d\n', ...
@@ -20,7 +23,7 @@ printf('%s (bats %s)   K:%d BB:%d HR:%d\n', ...
 printf('%s (throws %s) K:%d BB:%d HR:%d\n\n', ...
   pitcher.name, pitcher.hand, pitcher.K, pitcher.BB, pitcher.HR);
 
-labels = {'K','BB','HR','1B','2B','3B','PBWP','LIVEBALL'};
+labels = {'K','BB','HR','1B','2B','3B','LIVEBALL'};
 
 for i = 1:N
   [outcome, rolls] = resolve_at_bat(batter, pitcher, park);

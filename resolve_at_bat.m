@@ -3,13 +3,13 @@ function [outcome, rolls] = resolve_at_bat(batter, pitcher, park)
   %
   %   [outcome, rolls] = resolve_at_bat(batter, pitcher, park)
   %
-  %   outcome : 'K','BB','HR','1B','2B','3B','PBWP','LIVEBALL'
-  %             (PBWP and LIVEBALL are stubs until those stages exist)
+  %   outcome : 'K','BB','HR','1B','2B','3B','LIVEBALL'
+  %             (LIVEBALL is a stub until that stage exists)
   %   rolls   : cell array of strings describing each roll
   %
   % One d100 roll (two d10s, read as 00-99) on the park's table for this
   % pitcher-hand v batter-hand split (e.g. RvL = RHP vs LHB):
-  %   00-03   PB/WP check
+  %   00-03   PB/WP: the at-bat continues, so just roll again
   %   04-99   K, BIP, BB or HR, laid out per park and split
   %
   % K/BB/HR are "possibilities": batter and pitcher each roll a d20
@@ -21,16 +21,21 @@ function [outcome, rolls] = resolve_at_bat(batter, pitcher, park)
 
   split_key = [pitcher.hand 'v' batter.hand];
   tbl = park.(split_key);
-  d100 = randi(100) - 1;      % 00-99, like two d10s
-  result = tbl{d100 + 1};     % tables are 1-indexed
-  rolls{end+1} = sprintf('Deadball d100 (%s, %s): %02d -> %s', ...
-                         park.name, split_key, d100, result);
+
+  % PB/WP doesn't end the PA: re-roll until the roll is a real result.
+  % (Hook base-runner advancement in here once runners exist.)
+  while true
+    d100 = randi(100) - 1;      % 00-99, like two d10s
+    result = tbl{d100 + 1};     % tables are 1-indexed
+    rolls{end+1} = sprintf('Deadball d100 (%s, %s): %02d -> %s', ...
+                           park.name, split_key, d100, result);
+    if ~strcmp(result, 'PBWP')
+      break;
+    end
+    rolls{end+1} = 'PB/WP -> at-bat continues, re-roll';
+  end
 
   switch result
-    case 'PBWP'
-      % TODO: PB/WP check. Stub for now.
-      outcome = 'PBWP';
-      rolls{end+1} = 'PB/WP check (not yet implemented)';
     case 'BIP'
       [outcome, rolls] = liveball(rolls);
     case {'K','BB','HR'}
