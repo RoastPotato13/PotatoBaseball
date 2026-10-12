@@ -62,6 +62,16 @@ function park = generate_park(name, factor)
   SD_BB = 0.05;
   SD_HR = 0.15;
 
+  % ======================================================================
+  % L/R CORRELATION: how closely a random park's factor for left-handed
+  % batters tracks its factor for right-handed batters, per stat.
+  % 1.00 = L and R factors identical, 0.00 = fully independent.
+  % Only used when factors are drawn at random.
+  % ======================================================================
+  CORR_K  = 0.50;
+  CORR_BB = 0.50;
+  CORR_HR = 0.50;
+
   PBWP_SLOTS = 4;
   % ======================================================================
 
@@ -74,15 +84,26 @@ function park = generate_park(name, factor)
   lg    = [LG_K LG_BB LG_HR];
   fac   = [FACTOR_K FACTOR_BB FACTOR_HR];
   sd    = [SD_K SD_BB SD_HR];
+  rho   = [CORR_K CORR_BB CORR_HR];
 
   park.name = name;
 
   % --- park factors for right- and left-handed batters ---
   hands = {'R', 'L'};
+
+  % Random park: draw R first, then build L from it so that
+  % corr(L, R) = rho for each stat.
+  if isempty(factor)
+    zR = randn(1, 3);
+    zL = rho .* zR + sqrt(1 - rho.^2) .* randn(1, 3);
+    rand_vals.R = max(0, 1 + sd .* zR);
+    rand_vals.L = max(0, 1 + sd .* zL);
+  end
+
   for h = 1:2
     hd = hands{h};
     if isempty(factor)
-      vals = max(0, 1 + sd .* randn(1, 3));      % random park
+      vals = rand_vals.(hd);                     % random park
     elseif isfield(factor, hd)
       vals = factor.(hd);                        % supplied
     else
