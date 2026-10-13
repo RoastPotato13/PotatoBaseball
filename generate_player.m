@@ -45,20 +45,24 @@ function player = generate_player(name, type, rates)
   % Defaults put a league-average player at d20 skills of K 13, BB 16,
   % HR 10 (factor = (skill/20) / league_rate^(1/3)).
   BATTER_FACTOR_K   = 1.10;
-  BATTER_FACTOR_BB  = 1.5;
-  BATTER_FACTOR_HR  = 1.00;
+  BATTER_FACTOR_BB  = 1.50;
+  BATTER_FACTOR_HR  = 1.25;
 
-  PITCHER_FACTOR_K  = 1.10;
-  PITCHER_FACTOR_BB = 1.5;
-  PITCHER_FACTOR_HR = 2.0;
+  PITCHER_FACTOR_K  = 1.00;
+  PITCHER_FACTOR_BB = 1.50;
+  PITCHER_FACTOR_HR = 2.00;
 
   % Spread (standard deviation) of real rates around the league
-  % average, in the same units as the rates: fractions of PA, so 0.014
-  % means 1.4 percentage points. Rates are drawn from a normal
+  % average, in fractions of PA (0.014 = 1.4 percentage points).
+  % Separate for batters and pitchers. Drawn from a normal
   % distribution (no skew modeled for now) and floored at 0.
-  SD_K  = 0.050;     % 5.0 points
-  SD_BB = 0.030;     % 3.0 points
-  SD_HR = 0.014;     % 1.4 points
+  BATTER_SD_K   = 0.050;
+  BATTER_SD_BB  = 0.025;
+  BATTER_SD_HR  = 0.015;
+
+  PITCHER_SD_K  = 0.050;
+  PITCHER_SD_BB = 0.025;
+  PITCHER_SD_HR = 0.01;
 
   % Skill bounds (d20: 1 = 5% to succeed, 20 = always succeeds)
   SKILL_MIN = 1;
@@ -79,9 +83,11 @@ function player = generate_player(name, type, rates)
 
   if strcmpi(type, 'batter')
     factor = [BATTER_FACTOR_K BATTER_FACTOR_BB BATTER_FACTOR_HR];
+    sd     = [BATTER_SD_K BATTER_SD_BB BATTER_SD_HR];
     pct_left = LG_PCT_LEFT_BATTER;
   elseif strcmpi(type, 'pitcher')
     factor = [PITCHER_FACTOR_K PITCHER_FACTOR_BB PITCHER_FACTOR_HR];
+    sd     = [PITCHER_SD_K PITCHER_SD_BB PITCHER_SD_HR];
     pct_left = LG_PCT_LEFT_PITCHER;
   else
     error('generate_player: type must be ''batter'' or ''pitcher''');
@@ -96,7 +102,6 @@ function player = generate_player(name, type, rates)
 
   stats  = {'K', 'BB', 'HR'};
   lg     = [LG_K LG_BB LG_HR];
-  sd     = [SD_K SD_BB SD_HR];
 
   for i = 1:numel(stats)
     s = stats{i};

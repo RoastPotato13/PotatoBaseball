@@ -31,15 +31,15 @@ function park = generate_park(name, factor)
   % ======================================================================
   % LEAGUE AVERAGES (keep in sync with generate_player)
   % ======================================================================
-  LG_K  = 0.220;
+  LG_K  = 0.22;
   LG_BB = 0.08;
   LG_HR = 0.03;
 
   % Neutral park factors: baseline = (league rate)^(1/3) * factor.
   % Defaults give a neutral park K 60 / BB 15 / HR 15 of the 96 slots.
-  FACTOR_K  = 1/(1.1*1.1);%PMB Make sure these match Generate Player file so we end up at league avg.
+  FACTOR_K  = 1/(1.1*1);%PMB Make sure these match Generate Player file so we end up at league avg.
   FACTOR_BB = 1/(1.5*1.5);
-  FACTOR_HR = 1/(1*2);
+  FACTOR_HR = 1/(1.25*2);
 
   % ======================================================================
   % LEAGUE PLATOON SPLITS: pitcher-hand v batter-hand, [K BB HR], 1 = avg.
@@ -58,8 +58,8 @@ function park = generate_park(name, factor)
   % 0.20 means a typical park is within about +/-20% of average. Normal
   % distribution, floored at 0.
   % ======================================================================
-  SD_K  = 0.05;
-  SD_BB = 0.05;
+  SD_K  = 0.04;
+  SD_BB = 0.04;
   SD_HR = 0.15;
 
   % ======================================================================
