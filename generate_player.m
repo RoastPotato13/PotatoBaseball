@@ -128,4 +128,7 @@ function player = generate_player(name, type, rates)
     player.ratio.(s)    = ratio;
     player.baseline.(s) = baseline;
   end
+
+  % Batted-ball card and hard-hit skills for the Liveball portion.
+  player.contact = generate_contact(type);
 end

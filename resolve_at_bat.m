@@ -1,11 +1,12 @@
-function [outcome, rolls] = resolve_at_bat(batter, pitcher, park)
+function [outcome, rolls, ball] = resolve_at_bat(batter, pitcher, park)
   % RESOLVE_AT_BAT Simulate one plate appearance with dice.
   %
-  %   [outcome, rolls] = resolve_at_bat(batter, pitcher, park)
+  %   [outcome, rolls, ball] = resolve_at_bat(batter, pitcher, park)
   %
-  %   outcome : 'K','BB','HR','1B','2B','3B','LIVEBALL'
-  %             (LIVEBALL is a stub until that stage exists)
+  %   outcome : 'K','BB','HR','1B','2B','OUT','PU'
   %   rolls   : cell array of strings describing each roll
+  %   ball    : batted-ball struct from liveball.m (.kind .side .pos ...),
+  %             or [] if the PA never reached the Liveball portion
   %
   % One d100 roll (two d10s, read as 00-99) on the park's table for this
   % pitcher-hand v batter-hand split (e.g. RvL = RHP vs LHB):
@@ -14,10 +15,13 @@ function [outcome, rolls] = resolve_at_bat(batter, pitcher, park)
   %
   % K/BB/HR are "possibilities": batter and pitcher each roll a d20
   % against their own skill of that name. If both rolls are <= skill
-  % the result stands; otherwise move on to the Liveball portion.
-  % BIP goes straight to the Liveball portion.
+  % the result stands; otherwise move on to the Liveball portion, using
+  % the batter's card if the two d20s have opposite oddity and the
+  % pitcher's card if they match. BIP goes straight to the Liveball
+  % portion with a coin flip for the card (see liveball.m).
 
   rolls = {};
+  ball = [];
 
   split_key = [pitcher.hand 'v' batter.hand];
   tbl = park.(split_key);
@@ -37,15 +41,16 @@ function [outcome, rolls] = resolve_at_bat(batter, pitcher, park)
 
   switch result
     case 'BIP'
-      [outcome, rolls] = liveball(rolls);
+      [outcome, rolls, ball] = liveball(batter, pitcher, park, rolls, '');
     case {'K','BB','HR'}
-      [outcome, rolls] = possibility(result, batter, pitcher, rolls);
+      [outcome, rolls, ball] = possibility(result, batter, pitcher, park, rolls);
     otherwise
       error('resolve_at_bat: unexpected park result ''%s''', result);
   end
 end
 
-function [outcome, rolls] = possibility(event, batter, pitcher, rolls)
+function [outcome, rolls, ball] = possibility(event, batter, pitcher, park, rolls)
+  ball = [];
   % Batter and pitcher each roll a d20 against their skill of this name.
   b_roll = randi(20);
   p_roll = randi(20);
@@ -61,14 +66,17 @@ function [outcome, rolls] = possibility(event, batter, pitcher, rolls)
     rolls{end+1} = sprintf('%s stands', event);
   else
     rolls{end+1} = 'Not both -> Liveball';
-    [outcome, rolls] = liveball(rolls);
+    if mod(b_roll, 2) ~= mod(p_roll, 2)
+      owner = 'batter';
+      why = 'opposite';
+    else
+      owner = 'pitcher';
+      why = 'same';
+    end
+    rolls{end+1} = sprintf('d20s %d and %d have %s oddity -> %s card', ...
+                           b_roll, p_roll, why, owner);
+    [outcome, rolls, ball] = liveball(batter, pitcher, park, rolls, owner);
   end
-end
-
-function [outcome, rolls] = liveball(rolls)
-  % TODO: Liveball portion. Stub for now.
-  outcome = 'LIVEBALL';
-  rolls{end+1} = 'Liveball (not yet implemented)';
 end
 
 function s = ok_str(tf)

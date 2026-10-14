@@ -33,4 +33,6 @@ function park = get_park(name)
     otherwise
       error('get_park: unknown park ''%s'' (try spudsville, tater, coldstorage, random)', name);
   end
+
+  park.fence = generate_fence(lower(name));
 end

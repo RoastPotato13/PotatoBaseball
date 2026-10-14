@@ -23,4 +23,9 @@ function print_park(park)
       park.split.(sp).K, park.split.(sp).BB, park.split.(sp).HR, ...
       park.ranges.(sp));
   end
+
+  printf('  Ballpark check skills (d20, 10 = avg, higher = more outs)\n');
+  printf('               LEFT    RIGHT\n');
+  printf('    1B       %3d   %3d\n', park.fence.LF.B1, park.fence.RF.B1);
+  printf('    2B       %3d   %3d\n', park.fence.LF.B2, park.fence.RF.B2);
 end
