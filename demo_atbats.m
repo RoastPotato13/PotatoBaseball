@@ -3,7 +3,8 @@
 % Generates one batter, one pitcher and a park, runs N simulated
 % plate appearances with a roll-by-roll rolls, then a results tally.
 % Finishes with a larger silent run (M PAs) to sanity check rates, plus
-% a batted-ball table (fielder x result) for the balls in play.
+% a batted-ball table (fielder x result) for the balls in play, with
+% how often each fielder faced a fielding check and made the play.
 
 clear;
 
@@ -30,11 +31,16 @@ printf('\n');
 
 labels = {'K','BB','HR','1B','2B','OUT','PU'};
 
-% Batted-ball table: rows = fielder the ball was hit to, columns = result.
+% Batted-ball table: rows = fielder the ball ended up with (a hit that gets
+% past an infielder counts for the outfielder), columns = result.
 % PU is tracked on its own since it has no fielder.
+% chk / made: fielding checks faced by each fielder (whether or not the
+% ball then got through) and how many he passed, i.e. plays made.
 fielders = {'1B','2B','3B','SS','LF','CF','RF'};
 results  = {'OUT','1B','2B'};
-bb = zeros(numel(fielders), numel(results));
+bb   = zeros(numel(fielders), numel(results));
+chk  = zeros(1, numel(fielders));
+made = zeros(1, numel(fielders));
 pu_count = 0;
 
 for i = 1:N
@@ -59,6 +65,13 @@ for i = 1:M
       r = find(strcmp(fielders, ball.pos));
       c = find(strcmp(results, outcome));
       bb(r, c) = bb(r, c) + 1;
+      if strcmp(ball.check, 'FIELD')
+        k = find(strcmp(fielders, ball.check_pos));
+        chk(k) = chk(k) + 1;
+        if ball.check_passed
+          made(k) = made(k) + 1;
+        end
+      end
     end
   end
 end
@@ -75,17 +88,28 @@ printf('%-6s', '');
 for c = 1:numel(results)
   printf('%7s', results{c});
 end
-printf('%8s\n', 'Total');
+printf('%8s%9s%7s%8s\n', 'Total', 'Checks', 'Made', 'Made%');
 for r = 1:numel(fielders)
   printf('%-6s', fielders{r});
   for c = 1:numel(results)
     printf('%7d', bb(r, c));
   end
-  printf('%8d\n', sum(bb(r, :)));
+  if chk(r) > 0
+    ps = sprintf('%.0f%%', 100 * made(r) / chk(r));
+  else
+    ps = '-';
+  end
+  printf('%8d%9d%7d%8s\n', sum(bb(r, :)), chk(r), made(r), ps);
 end
 printf('%-6s%7s%7s%7s%8d\n', 'PU', '', '', '', pu_count);
 printf('%-6s', 'Total');
 for c = 1:numel(results)
   printf('%7d', sum(bb(:, c)));
 end
-printf('%8d\n', total_bip);
+if sum(chk) > 0
+  ps = sprintf('%.0f%%', 100 * sum(made) / sum(chk));
+else
+  ps = '-';
+end
+printf('%8d%9d%7d%8s\n', total_bip, sum(chk), sum(made), ps);
+printf('(Checks = fielding checks faced; Made = passed, so the play was an out.)\n');

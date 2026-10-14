@@ -10,7 +10,10 @@ function [outcome, rolls, ball] = liveball(batter, pitcher, park, rolls, owner)
   %   outcome : 'PU','OUT','1B','2B'
   %   rolls   : incoming cell array with this portion's rolls appended
   %   ball    : struct for later stages: .owner .code .kind .side
-  %             .action .pos (the fielder / field involved)
+  %             .action .pos (the fielder the ball ends up with)
+  %             .try_pos (infielder who missed it, if it got through)
+  %             .check ('FIELD', 'PARK' or ''), .check_pos (the fielder who
+  %             made a fielding check), .check_passed (true = made the play)
   %
   % Roll 1, d100 on the chosen card: one of 11 definitive results
   %   (see generate_contact). PU ends here: it's an out that counts like
@@ -52,7 +55,8 @@ function [outcome, rolls, ball] = liveball(batter, pitcher, park, rolls, owner)
   rolls{end+1} = sprintf('Liveball d100 (%s card): %02d -> %s', owner, d100, code);
 
   ball = struct('owner', owner, 'code', code, 'kind', '', 'side', '', ...
-                'action', '', 'pos', '');
+                'action', '', 'pos', '', 'try_pos', '', ...
+                'check', '', 'check_pos', '', 'check_passed', false);
 
   if strcmp(code, 'PU')
     ball.kind = 'PU';
@@ -84,9 +88,13 @@ function [outcome, rolls, ball] = liveball(batter, pitcher, park, rolls, owner)
   % --- roll 2: fielder and check type ---
   d20 = randi(20);
   action = tbl{d20};                    % e.g. 'FIELD_MI'
-  us = find(action == '_', 1);
-  verb = action(1:us - 1);
-  role = action(us + 1:end);
+  parts = strsplit(action, '_');        % verb, role, optional get-through role
+  verb = parts{1};
+  role = parts{2};
+  thru = '';
+  if numel(parts) >= 3
+    thru = parts{3};
+  end
   pos  = position_for(role, side, batter.hand);
   ball.action = action;
   ball.pos = pos;
@@ -102,15 +110,26 @@ function [outcome, rolls, ball] = liveball(batter, pitcher, park, rolls, owner)
     case 'FIELD'
       [passed, rolls] = skill_check(sprintf('Fielding (%s)', pos), ...
                                     fielder_skill(pos, T), rolls);
+      ball.check = 'FIELD';
+      ball.check_pos = pos;
+      ball.check_passed = passed;
       if passed
         outcome = 'OUT';
       else
         outcome = hit;
+        if ~isempty(thru)
+          % Missed infield ball rolls through to the outfield.
+          ball.try_pos = pos;
+          pos = position_for(thru, side, batter.hand);
+          ball.pos = pos;
+          rolls{end+1} = sprintf('Gets through -> hit to %s', pos);
+        end
       end
     case 'PARK'
       field = park_field(pos, side, batter.hand);
       [passed, rolls] = skill_check(sprintf('Ballpark %s/%s %s', pos, field, hit), ...
                                     park_skill(park, field, hit, T), rolls);
+      ball.check = 'PARK';
       if passed
         outcome = 'OUT';
       else

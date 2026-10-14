@@ -12,6 +12,8 @@ function T = liveball_tables()
   %   OUT_xx    automatic out, fielded by role xx
   %   HIT_xx    the hit stands, ball goes to role xx (no check)
   %   FIELD_xx  fielding check by role xx: d20 <= skill -> out, else hit
+  %   FIELD_xx_yy  same, but for an infielder: if the check fails the ball
+  %             gets through to role yy in the outfield
   %   PARK_xx   ballpark check: d20 <= park skill -> out, else hit.
   %             CO uses its own corner's skill (LF or RF); CF uses the
   %             LF or RF skill for the side the ball was hit to.
@@ -26,8 +28,11 @@ function T = liveball_tables()
   T.pass_rate     = T.default_skill / 20;
 
   % Single on a ground ball
-  T.GB_HIT = fill20({ 1,  3, 'FIELD_MI'; ...
-                      4,  5, 'FIELD_CI'; ...
+  % A failed infield check gets through: 1-2 up the middle to CF, 3-5 to
+  % the corner outfielder on that side.
+  T.GB_HIT = fill20({ 1,  2, 'FIELD_MI_CF'; ...
+                      3,  3, 'FIELD_MI_CO'; ...
+                      4,  5, 'FIELD_CI_CO'; ...
                       6, 14, 'HIT_CO';   ...
                      15, 20, 'HIT_CF' });
 
