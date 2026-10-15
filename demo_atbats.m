@@ -4,7 +4,8 @@
 % plate appearances with a roll-by-roll rolls, then a results tally.
 % Finishes with a larger silent run (M PAs) to sanity check rates, plus
 % a batted-ball table (fielder x result) for the balls in play, with
-% how often each fielder faced a fielding check and made the play.
+% how often each fielder faced a check and made the play, and a table of
+% checks by type (error, range, close play, outfield catch, ballpark).
 
 clear;
 
@@ -29,19 +30,27 @@ print_card(pitcher);
 print_card(batter);
 printf('\n');
 
-labels = {'K','BB','HR','1B','2B','OUT','PU'};
+labels = {'K','BB','HR','1B','2B','ROE','OUT','PU'};
 
 % Batted-ball table: rows = fielder the ball ended up with (a hit that gets
-% past an infielder counts for the outfielder), columns = result.
-% PU is tracked on its own since it has no fielder.
-% chk / made: fielding checks faced by each fielder (whether or not the
-% ball then got through) and how many he passed, i.e. plays made.
+% past an infielder counts for the outfielder; a failed close play stays
+% with the infielder, so infield hits show in the 1B column), columns =
+% result. ROE = reached on error. PU is tracked on its own since it has no
+% fielder.
+% chk / made: checks faced by each fielder (whether or not the ball then
+% got through) and how many he passed, i.e. plays made.
 fielders = {'1B','2B','3B','SS','LF','CF','RF'};
-results  = {'OUT','1B','2B'};
+results  = {'OUT','1B','2B','ROE'};
 bb   = zeros(numel(fielders), numel(results));
 chk  = zeros(1, numel(fielders));
 made = zeros(1, numel(fielders));
 pu_count = 0;
+
+% Checks by type. For ERROR, CLOSEPLAY, RANGE and FIELD a pass is a play
+% made (an out); PARK is the ballpark check (pass = out).
+types  = {'ERROR','RANGE','CLOSEPLAY','FIELD','PARK'};
+tchk   = zeros(1, numel(types));
+tmade  = zeros(1, numel(types));
 
 for i = 1:N
   [outcome, rolls] = resolve_at_bat(batter, pitcher, park);
@@ -65,11 +74,18 @@ for i = 1:M
       r = find(strcmp(fielders, ball.pos));
       c = find(strcmp(results, outcome));
       bb(r, c) = bb(r, c) + 1;
-      if strcmp(ball.check, 'FIELD')
-        k = find(strcmp(fielders, ball.check_pos));
-        chk(k) = chk(k) + 1;
+      if ~isempty(ball.check)
+        t = find(strcmp(types, ball.check));
+        tchk(t) = tchk(t) + 1;
         if ball.check_passed
-          made(k) = made(k) + 1;
+          tmade(t) = tmade(t) + 1;
+        end
+        if ~strcmp(ball.check, 'PARK')
+          k = find(strcmp(fielders, ball.check_pos));
+          chk(k) = chk(k) + 1;
+          if ball.check_passed
+            made(k) = made(k) + 1;
+          end
         end
       end
     end
@@ -101,7 +117,11 @@ for r = 1:numel(fielders)
   end
   printf('%8d%9d%7d%8s\n', sum(bb(r, :)), chk(r), made(r), ps);
 end
-printf('%-6s%7s%7s%7s%8d\n', 'PU', '', '', '', pu_count);
+printf('%-6s', 'PU');
+for c = 1:numel(results)
+  printf('%7s', '');
+end
+printf('%8d\n', pu_count);
 printf('%-6s', 'Total');
 for c = 1:numel(results)
   printf('%7d', sum(bb(:, c)));
@@ -112,4 +132,19 @@ else
   ps = '-';
 end
 printf('%8d%9d%7d%8s\n', total_bip, sum(chk), sum(made), ps);
-printf('(Checks = fielding checks faced; Made = passed, so the play was an out.)\n');
+printf('(Checks = fielder checks faced; Made = passed, so the play was an out.\n');
+printf(' Infield hits are the 1B column for 1B/2B/3B/SS; ROE = reached on error.)\n');
+
+% --- Checks by type ---
+printf('\n--- Checks by type ---\n');
+printf('%-11s%8s%8s%8s%10s\n', '', 'Faced', 'Passed', 'Pass%', '% of BIP');
+for t = 1:numel(types)
+  if tchk(t) > 0
+    ps = sprintf('%.0f%%', 100 * tmade(t) / tchk(t));
+  else
+    ps = '-';
+  end
+  printf('%-11s%8d%8d%8s%9.1f%%\n', types{t}, tchk(t), tmade(t), ps, ...
+         100 * tchk(t) / total_bip);
+end
+printf('(ERROR pass = no error; fail = ROE. CLOSEPLAY fail = infield hit.)\n');

@@ -3,7 +3,7 @@ function [outcome, rolls, ball] = resolve_at_bat(batter, pitcher, park)
   %
   %   [outcome, rolls, ball] = resolve_at_bat(batter, pitcher, park)
   %
-  %   outcome : 'K','BB','HR','1B','2B','OUT','PU'
+  %   outcome : 'K','BB','HR','1B','2B','OUT','PU','ROE'
   %   rolls   : cell array of strings describing each roll
   %   ball    : batted-ball struct from liveball.m (.kind .side .pos ...),
   %             or [] if the PA never reached the Liveball portion

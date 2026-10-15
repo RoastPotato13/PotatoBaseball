@@ -3,8 +3,8 @@ function print_card(player)
   %
   %   print_card(batter)
   %
-  % Codes: PU pop-up | GBO/FBO ground/fly-ball out | GB1/FB1 single on a
-  % ground/fly ball | FB2 double. _P = Pull, _O = Opp.
+  % Codes: PU pop-up | GBO/FBO ground/fly-ball out | GBC ground-ball check
+  % FB1 single on a fly ball | FB2 double. _P = Pull, _O = Opp.
 
   c = player.contact;
   printf('%s (%s) batted-ball card\n', player.name, player.type);

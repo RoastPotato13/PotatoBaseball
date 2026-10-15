@@ -7,25 +7,32 @@ function [outcome, rolls, ball] = liveball(batter, pitcher, park, rolls, owner)
   %             a coin (used for a straight BIP from the deadball roll).
   %             For a failed K/BB/HR possibility the caller decides from
   %             the two d20s: opposite oddity -> batter, same -> pitcher.
-  %   outcome : 'PU','OUT','1B','2B'
+  %   outcome : 'PU','OUT','1B','2B','ROE'
   %   rolls   : incoming cell array with this portion's rolls appended
   %   ball    : struct for later stages: .owner .code .kind .side
   %             .action .pos (the fielder the ball ends up with)
   %             .try_pos (infielder who missed it, if it got through)
-  %             .check ('FIELD', 'PARK' or ''), .check_pos (the fielder who
-  %             made a fielding check), .check_passed (true = made the play)
+  %             .check ('ERROR','RANGE','CLOSEPLAY','FIELD','PARK' or ''),
+  %             .check_pos (the fielder who made a fielding-type check),
+  %             .check_passed (true = made the play / out)
   %
   % Roll 1, d100 on the chosen card: one of 11 definitive results
   %   (see generate_contact). PU ends here: it's an out that counts like
   %   a K, no fielder.
   % Roll 2, d20 on the branch table for that result (liveball_tables):
-  %   picks the fielder and whether a check is needed.
-  % Roll 3, d20 (only for checks): FIELD_xx is a fielding check and
-  %   PARK_xx is a ballpark check. d20 <= skill -> OUT, otherwise the
-  %   hit stands. All fielders are skill 10 for now; park skills come
-  %   from park.fence (see generate_fence), which has LF and RF only.
-  %   A corner outfielder's ballpark check uses his own field; a ball
-  %   to CF uses the LF or RF value for the side it was hit to.
+  %   picks the fielder and whether a check is needed. A GBC card result
+  %   (ground-ball check) always goes to the GB_CHECK table.
+  % Roll 3, d20 (only for checks): d20 <= skill -> pass.
+  %   ERROR     pass = out, fail = ROE (reached on error, not a hit)
+  %   RANGE     pass = out, fail = single that gets through to the OF
+  %   CLOSEPLAY pass = out, fail = infield single (ball stays with the
+  %             infielder)
+  %   FIELD     pass = out, fail = hit stands (outfielder catch)
+  %   PARK      pass = out, fail = hit stands; park skills come from
+  %             park.fence (see generate_fence), LF and RF only. A corner
+  %             outfielder's check uses his own field; a ball to CF uses
+  %             the LF or RF value for the side it was hit to.
+  % Skills per check type live in liveball_tables (T.skill).
   %
   % No triples. HR is decided in the deadball roll only.
 
@@ -51,7 +58,7 @@ function [outcome, rolls, ball] = liveball(batter, pitcher, park, rolls, owner)
 
   % --- roll 1: the card ---
   d100 = randi(100) - 1;                % 00-99
-  code = card{d100 + 1};                % 'PU', 'GBO_P', 'FB2_O', ...
+  code = card{d100 + 1};                % 'PU', 'GBO_P', 'GBC_O', ...
   rolls{end+1} = sprintf('Liveball d100 (%s card): %02d -> %s', owner, d100, code);
 
   ball = struct('owner', owner, 'code', code, 'kind', '', 'side', '', ...
@@ -65,29 +72,29 @@ function [outcome, rolls, ball] = liveball(batter, pitcher, park, rolls, owner)
     return;
   end
 
-  kind = code(1:3);                     % GBO FBO GB1 FB1 FB2
+  kind = code(1:3);                     % GBO FBO GBC FB1 FB2
   side = code(5);                       % P or O
   ball.kind = kind;
   ball.side = side;
 
   switch kind
     case 'GBO'
-      tbl = T.GB_OUT;  hit = '';
+      tbl = T.GB_OUT;    hit = '';
     case 'FBO'
-      tbl = T.FB_OUT;  hit = '';
-    case 'GB1'
-      tbl = T.GB_HIT;  hit = '1B';
+      tbl = T.FB_OUT;    hit = '';
+    case 'GBC'
+      tbl = T.GB_CHECK;  hit = '1B';
     case 'FB1'
-      tbl = T.FB_HIT;  hit = '1B';
+      tbl = T.FB_HIT;    hit = '1B';
     case 'FB2'
-      tbl = T.FB_HIT;  hit = '2B';
+      tbl = T.FB_HIT;    hit = '2B';
     otherwise
       error('liveball: unexpected card result ''%s''', code);
   end
 
   % --- roll 2: fielder and check type ---
   d20 = randi(20);
-  action = tbl{d20};                    % e.g. 'FIELD_MI'
+  action = tbl{d20};                    % e.g. 'RANGE_MI_CF'
   parts = strsplit(action, '_');        % verb, role, optional get-through role
   verb = parts{1};
   role = parts{2};
@@ -107,10 +114,22 @@ function [outcome, rolls, ball] = liveball(batter, pitcher, park, rolls, owner)
       % TODO: slow grounder (GB outs), probably with a 4th d20.
     case 'HIT'
       outcome = hit;
-    case 'FIELD'
-      [passed, rolls] = skill_check(sprintf('Fielding (%s)', pos), ...
-                                    fielder_skill(pos, T), rolls);
-      ball.check = 'FIELD';
+    case 'ERROR'
+      [passed, rolls] = skill_check(sprintf('Error (%s)', pos), ...
+                                    fielder_skill(pos, verb, T), rolls, ...
+                                    'pass -> out', 'fail -> error, batter reaches');
+      ball.check = verb;
+      ball.check_pos = pos;
+      ball.check_passed = passed;
+      if passed
+        outcome = 'OUT';
+      else
+        outcome = 'ROE';
+      end
+    case {'RANGE', 'FIELD'}
+      [passed, rolls] = skill_check(sprintf('%s (%s)', check_label(verb), pos), ...
+                                    fielder_skill(pos, verb, T), rolls);
+      ball.check = verb;
       ball.check_pos = pos;
       ball.check_passed = passed;
       if passed
@@ -125,11 +144,24 @@ function [outcome, rolls, ball] = liveball(batter, pitcher, park, rolls, owner)
           rolls{end+1} = sprintf('Gets through -> hit to %s', pos);
         end
       end
+    case 'CLOSEPLAY'
+      [passed, rolls] = skill_check(sprintf('Close play (%s)', pos), ...
+                                    fielder_skill(pos, verb, T), rolls, ...
+                                    'pass -> out', 'fail -> infield hit');
+      ball.check = verb;
+      ball.check_pos = pos;
+      ball.check_passed = passed;
+      if passed
+        outcome = 'OUT';
+      else
+        outcome = hit;                  % ball stays with the infielder
+      end
     case 'PARK'
       field = park_field(pos, side, batter.hand);
       [passed, rolls] = skill_check(sprintf('Ballpark %s/%s %s', pos, field, hit), ...
                                     park_skill(park, field, hit, T), rolls);
       ball.check = 'PARK';
+      ball.check_passed = passed;
       if passed
         outcome = 'OUT';
       else
@@ -139,6 +171,17 @@ function [outcome, rolls, ball] = liveball(batter, pitcher, park, rolls, owner)
       error('liveball: unexpected action ''%s''', action);
   end
   rolls{end+1} = sprintf('-> %s', outcome);
+end
+
+function s = check_label(verb)
+  switch verb
+    case 'RANGE'
+      s = 'Range';
+    case 'FIELD'
+      s = 'Fielding';
+    otherwise
+      s = verb;
+  end
 end
 
 function tf = is_left_side(side, hand)
@@ -177,9 +220,10 @@ function pos = position_for(role, side, hand)
   end
 end
 
-function skill = fielder_skill(pos, T)
-  % Hook for real fielders later. Everyone is league average for now.
-  skill = T.default_skill;
+function skill = fielder_skill(pos, verb, T)
+  % Hook for real fielders (and batter speed for CLOSEPLAY) later.
+  % For now each check type has one league-average skill in liveball_tables.
+  skill = T.skill.(verb);
 end
 
 function skill = park_skill(park, field, hit, T)
@@ -192,13 +236,17 @@ function skill = park_skill(park, field, hit, T)
   end
 end
 
-function [passed, rolls] = skill_check(label, skill, rolls)
+function [passed, rolls] = skill_check(label, skill, rolls, pass_txt, fail_txt)
+  if nargin < 4
+    pass_txt = 'pass -> out';
+    fail_txt = 'fail -> hit stands';
+  end
   r = randi(20);
   passed = r <= skill;
   if passed
-    s = 'pass -> out';
+    s = pass_txt;
   else
-    s = 'fail -> hit stands';
+    s = fail_txt;
   end
   rolls{end+1} = sprintf('%s check: d20 %d vs %d (%s)', label, r, skill, s);
 end

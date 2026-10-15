@@ -5,36 +5,53 @@ function T = liveball_tables()
   %
   % Used by liveball.m (to resolve a ball in play) and generate_contact.m
   % (to inflate card hit rates so the FINAL league hit rates come out
-  % right after fielding/ballpark checks convert some hits to outs).
+  % right after the checks convert some card hits to outs).
   % Edit the tables here and both files stay in sync.
   %
   % Each table maps a d20 roll (1-20) to an action 'VERB_ROLE':
-  %   OUT_xx    automatic out, fielded by role xx
-  %   HIT_xx    the hit stands, ball goes to role xx (no check)
-  %   FIELD_xx  fielding check by role xx: d20 <= skill -> out, else hit
-  %   FIELD_xx_yy  same, but for an infielder: if the check fails the ball
-  %             gets through to role yy in the outfield
-  %   PARK_xx   ballpark check: d20 <= park skill -> out, else hit.
-  %             CO uses its own corner's skill (LF or RF); CF uses the
-  %             LF or RF skill for the side the ball was hit to.
+  %   OUT_xx       automatic out, fielded by role xx
+  %   HIT_xx       the hit stands, ball goes to role xx (no check)
+  %   FIELD_xx     outfielder catch check: d20 <= skill -> out, else hit
+  %   RANGE_xx_yy  infielder range check: d20 <= skill -> out. If it
+  %                fails the ball gets through to outfield role yy and
+  %                the result is a single.
+  %   ERROR_xx     error check: d20 <= skill -> fielder makes the play
+  %                (out). If it fails the fielder boots it and the batter
+  %                reaches on error (ROE). Never a hit.
+  %   CLOSEPLAY_xx close play: d20 <= skill -> out. If it fails the ball
+  %                stays in the infield and the batter beats it out
+  %                (infield single, fielded by role xx).
+  %   PARK_xx      ballpark check: d20 <= park skill -> out, else hit.
+  %                CO uses its own corner's skill (LF or RF); CF uses the
+  %                LF or RF skill for the side the ball was hit to.
   % Roles: MI = middle infielder (SS/2B), CI = corner infielder (3B/1B),
   %        CO = corner outfielder (LF/RF), CF = center fielder.
   % Pull/Opp plus the batter's hand turns a role into a position
   % (see position_for in liveball.m).
 
   % Skill 10 on a d20 passes 50% of the time. Every check uses this
-  % default until real fielders exist.
+  % default until real fielders/runners exist. Tweak per check type here
+  % (batter speed will eventually feed CLOSEPLAY).
   T.default_skill = 10;
-  T.pass_rate     = T.default_skill / 20;
+  T.pass_rate     = T.default_skill / 20;   % league-average park check
 
-  % Single on a ground ball
-  % A failed infield check gets through: 1-2 up the middle to CF, 3-5 to
-  % the corner outfielder on that side.
-  T.GB_HIT = fill20({ 1,  2, 'FIELD_MI_CF'; ...
-                      3,  3, 'FIELD_MI_CO'; ...
-                      4,  5, 'FIELD_CI_CO'; ...
-                      6, 14, 'HIT_CO';   ...
-                     15, 20, 'HIT_CF' });
+  T.skill.FIELD     = T.default_skill;      % outfielder catch
+  T.skill.RANGE     = T.default_skill;      % infielder range
+  T.skill.ERROR     = T.default_skill;      % pass = no error
+  T.skill.CLOSEPLAY = T.default_skill;      % pass = throw beats runner
+
+  % GB Checks: what the card's GBC result turns into.
+  % 1-5 error checks, 6-10 range checks (a miss rolls to the outfield),
+  % 11-15 close plays (a miss is an infield hit), 16-20 clean singles.
+  T.GB_CHECK = fill20({ 1,  3, 'ERROR_MI';       ...
+                        4,  5, 'ERROR_CI';       ...
+                        6,  7, 'RANGE_MI_CF';    ...
+                        8,  8, 'RANGE_MI_CO';    ...
+                        9, 10, 'RANGE_CI_CO';    ...
+                       11, 13, 'CLOSEPLAY_MI';   ...
+                       14, 15, 'CLOSEPLAY_CI';   ...
+                       16, 18, 'HIT_CO';         ...
+                       19, 20, 'HIT_CF' });
 
   % 1B or 2B on a fly ball
   T.FB_HIT = fill20({ 1,  3, 'FIELD_CO'; ...
